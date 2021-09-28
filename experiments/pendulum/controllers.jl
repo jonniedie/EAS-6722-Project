@@ -8,9 +8,9 @@ end
 
 # Proportional-derivative controller
 function PD_controller(;kp, kd)
-    p = ComponentArray(;kp, kd)
+    gains = ComponentArray(;kp, kd)
     f = (x, p, t) -> -p.kp*x.θ - p.kd*x.ω
-    return p, f
+    return gains, f
 end
 
 # Single-layer dense neural controller

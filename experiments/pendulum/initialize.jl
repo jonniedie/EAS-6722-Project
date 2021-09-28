@@ -2,7 +2,10 @@ using ConcreteStructs
 using ComponentArrays
 using DifferentialEquations
 using DiffEqFlux
+using DiffEqSensitivity
 using Flux
+using GalacticOptim
+using Optim
 using Setfield
 using UnPack
 
