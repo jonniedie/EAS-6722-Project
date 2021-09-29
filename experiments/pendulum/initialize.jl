@@ -3,8 +3,8 @@ using ComponentArrays
 using DifferentialEquations
 using DiffEqFlux
 using DiffEqSensitivity
+using DiffEqUncertainty
 using Flux
-using GalacticOptim
 using Optim
 using Setfield
 using UnPack

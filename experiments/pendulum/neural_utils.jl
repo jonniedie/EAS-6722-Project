@@ -1,6 +1,7 @@
 # Make the parameter structure of a dense layer
 dense_layer(n_in, n_out) = ComponentArray(W=Flux.glorot_uniform(n_out, n_in), b=zeros(Float32, n_out))
 
+
 # Returns a function that runs the simulation for a given control parameters
 function make_run_func(prob; kwargs...)
     return function (control)

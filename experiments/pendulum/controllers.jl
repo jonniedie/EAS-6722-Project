@@ -22,7 +22,7 @@ function dense_neural_controller(layer_size, act_fun=identity, out_fun=only)
 
     f = function (x, p, t)
         @unpack L1, L2 = p
-        out = act_fun.(L2.W * act_fun.(L1.W * x .+ L1.b) .+ L2.b)
+        out = act_fun.(L2.W * act_fun.(L1.W * x + L1.b) + L2.b)
         return out_fun(out)
     end
 
