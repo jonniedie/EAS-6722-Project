@@ -20,9 +20,21 @@ function make_objective(prob, out_fun; kwargs...)
     end
 end
 
-function show_training(θ, loss, pred; doplot=false)
-    display(loss)
-    return false
+function make_callback(; plot_every=1, doplot=false)
+    # plt = plot()
+    all_loss = Float64[]
+    i = 0
+    return function (θ, loss, pred; doplot=doplot)
+        display(loss)
+        if doplot
+            if i % plot_every == 0
+                push!(all_loss, loss)
+                display(plot((0:length(all_loss)-1)*plot_every, all_loss))
+            end
+        end
+        i += 1
+        return false
+    end
 end
 
 # # Don't think we'll actually use this

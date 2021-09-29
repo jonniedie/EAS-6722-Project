@@ -60,12 +60,13 @@ plot(plot(PD_sol, title="PD"), plot(neural_sol, title="Neural"), layout=(2,1), s
 ## Buiild optimization problems
 evaluate_sol = sol -> sum(abs2, Array(sol))
 PD_obj = make_objective(PD_prob, evaluate_sol; sensealg=InterpolatingAdjoint())
+cb = make_callback(; plot_every=100, doplot=true)
 
 
 ## Solve optimization problem'
 x0 = ComponentArray{Float64}(kp=1000, kd=100)
-res1 = DiffEqFlux.sciml_train(PD_obj, x0, ADAM(0.05), maxiters=500)
+res1 = DiffEqFlux.sciml_train(PD_obj, x0, ADAM(0.05); maxiters=500, cb)
 # cb(res1.minimizer, loss_n_ode(res1.minimizer)...; doplot=true)
 
-res2 = DiffEqFlux.sciml_train(PD_obj, res1.minimizer, Newton())
+res2 = DiffEqFlux.sciml_train(PD_obj, res1.minimizer, Newton(); cb)
 # cb(res2.minimizer, loss_n_ode(res2.minimizer)...; doplot=true)
