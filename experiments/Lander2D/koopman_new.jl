@@ -1,6 +1,7 @@
 using CombinedUncertainDiffEq
 using ComponentArrays
 using ConcreteStructs
+using Cubature
 using DifferentialEquations
 using DiffEqUncertainty
 using LinearAlgebra
@@ -135,8 +136,12 @@ vy = [sol[4, end] for sol in mc_sol.u]
 
 
 ## Solve
-@time mc_exp = mc_expectation(g, ODE_prob, ic, p, Tsit5(), EnsembleThreads(); trajectories=50000)
-@time koop_exp = koopman_expectation(g, ODE_prob, ic, p, Tsit5(); maxiters=50000)
+@time mc_exp = mc_expectation(g, ODE_prob, ic, p, Tsit5(), EnsembleThreads(); trajectories=200000)
+@time koop_exp = koopman_expectation(g, ODE_prob, ic, p, Tsit5();
+    quadalg=CubaDivonne(),
+    # iabstol=3e-2,
+    # ireltol=3e-2,
+)
 
 
 ## Plot Simulation

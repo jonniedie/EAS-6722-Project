@@ -1,16 +1,15 @@
 
 using ComponentArrays
 using LinearAlgebra
-using MAT
 using NeuralNetworkAnalysis
 using ReachabilityAnalysis
 using Symbolics
+using UnPack
 
 
 ## Constants and Symobics
 const g = 9.80665
-vars = @variables rx, ry, vx, vy, m_prop, Isp, m_dry, t
-controls = @variables T, α
+vars = @variables rx, ry, vx, vy, m_prop, Isp, m_dry, T, t
 
 
 ## General Utilities
@@ -40,62 +39,70 @@ end
 
 
 ## ODE Functions
-function lander_thrust_on!(x, u, dx)
-    # Unpack variables
-    rx, ry, vx, vy, m_prop, Isp, m_dry, t = x
-    T, θ = u
+function make_ode_functions(controls)
+    @unpack kp, kd = controls
 
-    # Intermediate parameters
-    m = m_dry + m_prop
-    Fx, Fy = T .* (sin(θ), cos(θ))
+    function lander_thrust_on!(dx, x, p, t)
+        # Unpack variables
+        rx, ry, vx, vy, m_prop, Isp, m_dry, T, t = x
 
-    # State derivatives
-    dx[1] = vx              # rx
-    dx[2] = vy              # ry
-    dx[3] = Fx/m            # vx
-    dx[4] = -g + Fy/m       # vy
-    dx[5] = -T/(Isp * g)    # m_prop
-    dx[6:7] .= zero(x[1])   # Isp, m_dry
-    dx[8] = one(x[1])       # t
-    return nothing
+        # Intermediate parameters
+        m = m_dry + m_prop
+        θ = -kd*vx - kp*rx
+        Fx, Fy = T .* (sin(θ), cos(θ))
+
+        # State derivatives
+        dx[1] = vx              # rx
+        dx[2] = vy              # ry
+        dx[3] = Fx/m            # vx
+        dx[4] = -g + Fy/m       # vy
+        dx[5] = -T/(Isp * g)    # m_prop
+        dx[6:8] .= zero(x[1])   # Isp, m_dry, T
+        dx[9] = one(x[1])      # t
+        return nothing
+    end
+
+    function lander_thrust_off!(dx, x, p, t)
+        # Unpack variables
+        rx, ry, vx, vy, m_prop, Isp, m_dry, T, t = x
+
+        # State derivatives
+        dx .= zero(x[1])
+        dx[1] = vx              # rx
+        dx[2] = vy              # ry
+        dx[4] = -g              # vy
+        dx[end] = one(x[1])     # t
+        return nothing
+    end
+
+    function lander_terminated!(dx, x, p, t)
+        dx .= zero(x[1])
+        return nothing
+    end
+
+    return lander_thrust_on!, lander_thrust_off!, lander_terminated!
 end
-
-function lander_thrust_off!(x, u, dx)
-    # Unpack variables
-    rx, ry, vx, vy, m_prop, Isp, m_dry, t = x
-
-    # State derivatives
-    dx .= zero(x[1])
-    dx[1] = vx              # rx
-    dx[2] = vy              # ry
-    dx[4] = -g              # vy
-    dx[8] = one(x[1])       # t
-    return nothing
-end
-
-function lander_terminated!(x, u, dx)
-    dx .= zero(x[1])
-    return nothing
-end
-
 
 ## Constraints
 angle_sat = deg2rad(45)
-u_constraints = HPolyhedron([α ≥ -angle_sat, α ≤ angle_sat], controls)
+# u_constraints = HPolyhedron([α ≥ -angle_sat, α ≤ angle_sat], controls)
 above_ground = HalfSpace(ry > 0, vars)
 below_ground = HalfSpace(ry ≤ 0, vars)
 burnt_out = HalfSpace(m_prop ≤ 0, vars)
 
 
 ## Modes
+controls = ComponentArray(kp=0.01, kd=0.05)
+f_on!, f_off!, f_terminated! = make_ode_functions(controls)
+
 # Mode 1: Thrust on
-thrust_on = @system(x'=lander_thrust_on!(x,u), x∈above_ground, u∈u_constraints, dims=(8,2))
+thrust_on = @system(x'=f_on!(x), x∈above_ground, dims=9)
 
 # Mode 2: Thrust off
-thrust_off = @system(x'=lander_thrust_off!(x,u), x∈above_ground, u∈u_constraints, dims=(8,2))
+thrust_off = @system(x'=f_off!(x), x∈above_ground, dims=9)
 
 # Mode 3: Terminated (hit ground)
-terminated = @system(x'=lander_terminated!(x,u), x∈below_ground, u∈u_constraints, dims=(8,2))
+terminated = @system(x'=f_terminated!(x), x∈below_ground, dims=9)
 
 modes = [thrust_on, thrust_off, terminated]
 
@@ -104,8 +111,8 @@ modes = [thrust_on, thrust_off, terminated]
 # State automoaton
 automaton = LightAutomaton(3)
 
-hits_ground = ConstrainedIdentityMap(length(vars), below_ground)
-burns_out = ConstrainedIdentityMap(length(vars), burnt_out)
+hits_ground = @map(x -> x, dim:9, x∈below_ground) #ConstrainedIdentityMap(length(vars), below_ground)
+burns_out = @map(x -> x, dim:9, x∈burnt_out) #ConstrainedIdentityMap(length(vars), burnt_out)
 resetmaps = typeof(hits_ground)[]
 
 # Transition 1: thrust on -> thrust off
@@ -133,9 +140,23 @@ x0 = Any[
     20.0,       # m_prop
     70 ± 3,     # Isp
     60 ± 5,     # m_dry
+    1400..1450, # T
     0.0,        # t
-] |> to_set
+] |> to_set |> concretize
 
 ic = [(1, x0)]
 
 prob = InitialValueProblem(H, ic)
+
+
+##
+boxdirs = BoxDirections(9)
+alg = TMJets(; orderT=9, orderQ=1, disjointness=BoxEnclosure())
+sol = solve(prob, alg;
+    T = 10.0,
+    max_jumps = 2,
+    intersect_source_invariant = false,
+    intersection_method = TemplateHullIntersection(boxdirs),
+    clustering_method = LazyClustering(1),
+    disjointness_method = BoxEnclosure(),
+)
