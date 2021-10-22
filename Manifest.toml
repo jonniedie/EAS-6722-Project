@@ -109,12 +109,6 @@ git-tree-sha1 = "19a35467a82e236ff51bc17a3a44b69ef35185a2"
 uuid = "6e34b625-4abd-537c-b88f-471c36dfa7a0"
 version = "1.0.8+0"
 
-[[CDDLib]]
-deps = ["BinaryProvider", "JuMP", "Libdl", "LinearAlgebra", "MathOptInterface", "Polyhedra", "SparseArrays", "cddlib_jll"]
-git-tree-sha1 = "d30aeb48b86b5933dcbcf3e957cea16897b84f06"
-uuid = "3391f64e-dcde-5f30-b752-e11513730f60"
-version = "0.7.0"
-
 [[CEnum]]
 git-tree-sha1 = "215a9aa4a1f23fbd05b92769fdd62559488d70e9"
 uuid = "fa961155-64e5-5f13-b03f-caf6b980ea82"
@@ -1156,22 +1150,6 @@ version = "0.3.5"
 [[NetworkOptions]]
 uuid = "ca575930-c2e3-43a9-ace4-1e988b2c1908"
 
-[[NeuralNetworkAnalysis]]
-deps = ["CommonSolve", "LazySets", "MathematicalSystems", "NeuralVerification", "ReachabilityAnalysis", "Reexport", "Requires"]
-git-tree-sha1 = "194e3de4eb1a74e69c95ba00c92e84e6c84842e0"
-repo-rev = "master"
-repo-url = "https://github.com/JuliaReach/NeuralNetworkAnalysis.jl"
-uuid = "73c0b437-a350-4e9b-97ac-9adb151c271b"
-version = "0.1.0"
-
-[[NeuralVerification]]
-deps = ["CDDLib", "GLPK", "GLPKMathProgInterface", "Interpolations", "JuMP", "LazySets", "LinearAlgebra", "Parameters", "PicoSAT", "Pkg", "Polyhedra", "Random", "Reexport", "Requires", "SCS"]
-git-tree-sha1 = "dc39c43021c2b2d5cdeb4444c5ecdad3583579cc"
-repo-rev = "master"
-repo-url = "https://github.com/sisl/NeuralVerification.jl"
-uuid = "146f25fa-00e7-11e9-3ae5-fdbac6e12fa7"
-version = "0.1.0"
-
 [[NonlinearSolve]]
 deps = ["ArrayInterface", "FiniteDiff", "ForwardDiff", "IterativeSolvers", "LinearAlgebra", "RecursiveArrayTools", "RecursiveFactorization", "Reexport", "SciMLBase", "Setfield", "StaticArrays", "UnPack"]
 git-tree-sha1 = "e9ffc92217b8709e0cf7b8808f6223a4a0936c95"
@@ -1267,12 +1245,6 @@ deps = ["Dates"]
 git-tree-sha1 = "a8709b968a1ea6abc2dc1967cb1db6ac9a00dfb6"
 uuid = "69de0a69-1ddd-5017-9359-2bf0b02dc9f0"
 version = "2.0.5"
-
-[[PicoSAT]]
-deps = ["BinaryProvider", "Libdl", "Test"]
-git-tree-sha1 = "9bb3bdab71b8490583d0eb18a333d23339bfa22c"
-uuid = "ff2beb65-d7cd-5ff1-a187-74671133a339"
-version = "0.3.3"
 
 [[Pidfile]]
 deps = ["FileWatching", "Test"]
@@ -1500,24 +1472,6 @@ deps = ["ExprTools", "SHA", "Serialization"]
 git-tree-sha1 = "cdc1e4278e91a6ad530770ebb327f9ed83cf10c4"
 uuid = "7e49a35a-f44a-4d26-94aa-eba1b4ca6b47"
 version = "0.5.3"
-
-[[SCS]]
-deps = ["BinaryProvider", "Libdl", "LinearAlgebra", "MathOptInterface", "MathProgBase", "Requires", "SCS_GPU_jll", "SCS_jll", "SparseArrays"]
-git-tree-sha1 = "efc1cf417dffb455b74a3d48857ae418098fc8a1"
-uuid = "c946c3f1-0d1f-5ce8-9dea-7daa1f7e2d13"
-version = "0.7.1"
-
-[[SCS_GPU_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "OpenBLAS_jll", "Pkg"]
-git-tree-sha1 = "a96402e3b494a8bbec61b1adb86d4be04112c646"
-uuid = "af6e375f-46ec-5fa0-b791-491b0dfa44a4"
-version = "2.1.4+0"
-
-[[SCS_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "OpenBLAS_jll", "Pkg"]
-git-tree-sha1 = "66c07568ecec96260aaac194ee1e5ee8df62f386"
-uuid = "f4f2fc5b-1d94-523c-97ea-2ab488bedf4b"
-version = "2.1.4+0"
 
 [[SHA]]
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
@@ -2025,12 +1979,6 @@ deps = ["MacroTools"]
 git-tree-sha1 = "8c1a8e4dfacb1fd631745552c8db35d0deb09ea0"
 uuid = "700de1a5-db45-46bc-99cf-38207098b444"
 version = "0.2.2"
-
-[[cddlib_jll]]
-deps = ["Artifacts", "GMP_jll", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "61b6618e9ab74115e13168b85b8e73cbfee6a078"
-uuid = "f07e07eb-5685-515a-97c8-3014f6152feb"
-version = "0.94.10+1"
 
 [[libass_jll]]
 deps = ["Artifacts", "Bzip2_jll", "FreeType2_jll", "FriBidi_jll", "HarfBuzz_jll", "JLLWrappers", "Libdl", "Pkg", "Zlib_jll"]
