@@ -3,6 +3,7 @@ using ComponentArrays
 using ConcreteStructs
 using DifferentialEquations
 using DiffEqUncertainty
+using IntervalArithmetic
 using LinearAlgebra
 using Plots; plotlyjs()
 using Statistics
@@ -10,12 +11,7 @@ using UnPack
 
 
 ## Functions
-# This is needed to prevent segfaults with Julia v1.7 on M1 mac
-Base.show(io::IO, ::MIME"text/plain", x::Interval) = print(io, x.lo, "..", x.hi)
-Base.show(io::IO, x::Interval) = print(io, x.lo, "..", x.hi)
-
-mid(x) = x
-mid(x::Interval) = (x.lo + x.hi) / 2
+IntervalArithmetic.mid(x::Float64) = x
 
 range_width(x) = 0
 range_width(x::Interval) = x.hi - x.lo
@@ -134,7 +130,7 @@ vy = [sol[4, end] for sol in mc_sol.u]
 
 
 ## Solve
-@time mc_exp = mc_expectation(meets_requirements, ODE_prob, ic, p, Tsit5(), EnsembleThreads(); trajectories=100000)
+# @time mc_exp = mc_expectation(meets_requirements, ODE_prob, ic, p, Tsit5(), EnsembleThreads(); trajectories=100000)
 @time koop_exp = koopman_expectation(meets_requirements, ODE_prob, ic, p, Tsit5())
 
 

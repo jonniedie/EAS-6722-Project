@@ -3,6 +3,7 @@ using ComponentArrays
 using LinearAlgebra
 import IntervalArithmetic
 using Plots
+import Polyhedra
 using ReachabilityAnalysis
 using Symbolics
 using UnPack
@@ -14,10 +15,6 @@ vars = @variables rx, ry, vx, vy, m_prop, Isp, m_dry, T, t
 
 
 ## General Utilities
-# This is needed to prevent segfaults with Julia v1.7 on M1 mac
-Base.show(io::IO, ::MIME"text/plain", x::IntervalArithmetic.Interval) = print(io, x.lo, "..", x.hi)
-Base.show(io::IO, x::IntervalArithmetic.Interval) = print(io, x.lo, "..", x.hi)
-
 # Convert from Intervals and numbers to LazySets
 to_set(a::AbstractArray) = reduce(×, to_set.(a))
 to_set(i::IntervalArithmetic.Interval) = Interval(i)
@@ -170,9 +167,9 @@ alg = TMJets(; orderT=9, disjointness=BoxEnclosure(), maxsteps=10000)
 reach_sol = sol[1];
 
 ##
-plt1 = plot(reach_sol; vars=(1,2), label="Flowpipe", title="Position Set Propagation", xlabel="Cross Range (m)", ylabel="Altitude (m)", aspect_ratio=1)
-plot!(reach_sol[1]; vars=(1,2), label="Initial Uncertainty")
-plot!(reach_sol[end]; vars=(1,2), label="Final Uncertainty")
+plt1 = plot(reach_sol; vars=(1,2), color=:goldenrod, label="Flowpipe", title="Position Set Propagation", xlabel="Cross Range (m)", ylabel="Altitude (m)", aspect_ratio=1)
+plot!(reach_sol[1]; vars=(1,2), color=:red, label="Initial Uncertainty")
+plot!(reach_sol[end]; vars=(1,2), color=:green, label="Final Uncertainty")
 
 ##
 reqs = (-0.5..0.5) × (-10..0)

@@ -11,10 +11,6 @@ using UnPack
 
 
 ## Functions
-# This is needed to prevent segfaults with Julia v1.7 on M1 mac
-Base.show(io::IO, ::MIME"text/plain", x::Interval) = print(io, x.lo, "..", x.hi)
-Base.show(io::IO, x::Interval) = print(io, x.lo, "..", x.hi)
-
 mid(x) = x
 mid(x::Interval) = (x.lo + x.hi) / 2
 
