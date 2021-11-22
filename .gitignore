@@ -22,3 +22,6 @@ docs/site/
 
 # We don't want to sync data files
 *.mat
+
+# No gifs
+*.gif

@@ -1,7 +1,7 @@
 
 using ComponentArrays
 using LinearAlgebra
-import IntervalArithmetic
+import ReachabilityAnalysis.IntervalArithmetic
 using Plots
 import Polyhedra
 using ReachabilityAnalysis
