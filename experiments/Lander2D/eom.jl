@@ -3,7 +3,8 @@ const g = 9.80665
 # ODE Functions
 @taylorize function lander_thrust_on!(dx, x, p, t)
     # Unpack variables
-    rx, ry, vx, vy, m_prop, Isp, m_dry, T, θ = x
+    rx, ry, vx, vy, m_prop, Isp, m_dry, T = x
+    θ = p[2]
 
     # Intermediate parameters
     m = m_dry + m_prop
@@ -21,7 +22,6 @@ const g = 9.80665
     dx[6] = _0              # Isp
     dx[7] = _0              # m_dry
     dx[8] = _0              # T
-    dx[9] = _0              # θ
     return nothing
 end
 
@@ -42,7 +42,6 @@ end
     dx[6] = _0      # Isp
     dx[7] = _0      # m_dry
     dx[8] = _0      # T
-    dx[9] = _0      # θ
     return nothing
 end
 
@@ -56,6 +55,5 @@ end
     dx[6] = _0  # Isp
     dx[7] = _0  # m_dry
     dx[8] = _0  # T
-    dx[9] = _0  # θ
     return nothing
 end
