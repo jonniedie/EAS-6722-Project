@@ -132,7 +132,7 @@ vy = [sol[4, end] for sol in mc_sol.u]
 
 
 ## Solve
-@time mc_exp = mc_expectation(g, ODE_prob, ic, p, Tsit5(), EnsembleThreads(); trajectories=200000)
+@time mc_exp = mc_expectation(g, ODE_prob, ic, p, Tsit5(), EnsembleSerial(); trajectories=200000)
 @time koop_exp = koopman_expectation(g, ODE_prob, ic, p, Tsit5();
     quadalg=CubaDivonne(),
     # iabstol=3e-2,

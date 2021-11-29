@@ -1,59 +1,36 @@
 const g = 9.80665
 
-# ODE Functions
-@taylorize function lander_thrust_on!(dx, x, p, t)
-    # Unpack variables
-    rx, ry, vx, vy, m_prop, Isp, m_dry, T = x
-    θ = p[2]
+# ODE function for 2D lander problem
+function lander_2D!(D, vars, (params, θ), t)
+    @unpack r, v, m_prop = vars
+    @unpack Isp, m_dry, T = params
 
-    # Intermediate parameters
     m = m_dry + m_prop
-    Fx, Fy = T .* (sin(θ), cos(θ))
+    Fx = T*sin(θ)
+    Fy = T*cos(θ)
 
-    # Needed because numbers can't be converted into Taylor?
-    _0 = zero(x[1])
+    D.r.x = v.x
+    D.r.y = v.y
+    D.v.x = Fx/m
+    D.v.y = -g + Fy/m
+    D.m_prop = -T / (Isp * g)
 
-    # State derivatives
-    dx[1] = vx              # rx
-    dx[2] = vy              # ry
-    dx[3] = Fx/m            # vx
-    dx[4] = -g + Fy/m       # vy
-    dx[5] = -T/(Isp * g)    # m_prop
-    dx[6] = _0              # Isp
-    dx[7] = _0              # m_dry
-    dx[8] = _0              # T
     return nothing
 end
 
-@taylorize function lander_thrust_off!(dx, x, p, t)
-    # Unpack variables
-    rx, ry, vx, vy, m_prop, Isp, m_dry, T = x
+function lander_2D(vars, (params, θ), t)
+    @unpack r, v, m_prop = vars
+    @unpack Isp, m_dry, T = params
 
-    # Needed because numbers can't be converted into Taylor?
-    _1 = one(x[1])
-    _0 = zero(x[1])
+    m = m_dry + m_prop
+    Fx = T*sin(θ)
+    Fy = T*cos(θ)
 
-    # State derivatives
-    dx[1] = vx      # rx
-    dx[2] = vy      # ry
-    dx[3] = _0      # vx
-    dx[4] = -_1*g   # vy
-    dx[5] = _0      # m_prop
-    dx[6] = _0      # Isp
-    dx[7] = _0      # m_dry
-    dx[8] = _0      # T
-    return nothing
-end
-
-@taylorize function lander_terminated!(dx, x, p, t)
-    _0 = zero(x[1])
-    dx[1] = _0  # rx
-    dx[2] = _0  # ry
-    dx[3] = _0  # vx
-    dx[4] = _0  # vy
-    dx[5] = _0  # m_prop
-    dx[6] = _0  # Isp
-    dx[7] = _0  # m_dry
-    dx[8] = _0  # T
-    return nothing
+    return [
+        v.x
+        v.y
+        Fx/m
+        -g + Fy/m
+        -T / (Isp * g)
+    ]
 end

@@ -16,41 +16,18 @@ using UnPack
 
 const NNA = NeuralNetworkAnalysis
 
-
 ## Includes
 include("../../general_utils.jl")
-# include("../../controller_utils.jl")
-include("eom.jl")
-
-
-## Controller definitions
-Base.@kwdef @concrete struct WithController <: Function
-    ode_fun<:Function
-    controller<:Function = (x,p,t) -> 0
-    params = nothing
-end
-
-(sys::WithController)(dx, x, p, t) = sys.ode_fun(dx, x, (p, sys.controller(x, sys.params, t)), t)
-
-
-dense_layer(n_in, n_out, activation=identity; eltype=Float32) = (; params=ComponentArray{eltype}(W=glorot_uniform(n_out, n_in), b=zeros(n_out)), activation)
-
-function chain(; layers...)
-    layers = NamedTuple(layers)
-    params = ComponentArray(; map(first, layers)...)
-    activations = map(last, layers)
-    k = valkeys(params)
-    f = (x,p,t) -> reduce((x,(f,p))->f.(p.W*x .+ p.b), zip(activations, view.(Ref(p), k)); init=x)
-    return (; params, f)
-end
-chain(layer1, layers...) = chain(; NamedTuple{ntuple(i->Symbol(:layer, i), length(layers)+1)}((layer1, layers...))...)
+include("../../controller_utils.jl")
+include("eom_reach.jl")
 
 # # Neural network controller
 # params, controller = chain(
-#     dense_layer( 9, 20, relu),
-#     dense_layer(20, 20, relu),
+#     dense_layer( 9, 20, tanh),
+#     dense_layer(20, 20, tanh),
 #     dense_layer(20,  1),
 # )
+# controller = first ∘ controller
 
 # PD controller
 params = ComponentArray(kp=0.01, kd=0.05)
@@ -63,7 +40,7 @@ f_terminated! = WithController(lander_terminated!, controller, params)
 
 ##
 # Symobics
-vars = @variables rx, ry, vx, vy, m_prop, Isp, m_dry, T
+vars = @variables rx, ry, vx, vy, m_prop, Isp, m_dry, T, θ
 
 # Guard
 above_ground = HPolyhedron([ry > 0, m_prop ≥ 0.1], vars)
@@ -71,15 +48,15 @@ burnt_out = HPolyhedron([ry > 0, m_prop ≤ 0.1], vars)
 below_ground = HalfSpace(ry ≤ 0, vars)
 
 # Modes
-thrust_on = @system(x'=f_on!(x), x ∈ above_ground, dims=8)
-thrust_off = @system(x'=f_off!(x), x ∈ burnt_out, dims=8)
-terminated = @system(x'=f_terminated!(x), x ∈ below_ground, dims=8)
+thrust_on = @system(x'=f_on!(x), x ∈ above_ground, dims=9)
+thrust_off = @system(x'=f_off!(x), x ∈ burnt_out, dims=9)
+terminated = @system(x'=f_terminated!(x), x ∈ below_ground, dims=9)
 sim_modes = [thrust_on, thrust_off, terminated]
 
 # Mode Transitions
 automaton = LightAutomaton(3)
-hits_ground = @map(x -> x, dim:8, x ∈ below_ground)
-burns_out = @map(x -> x, dim:8, x ∈ HalfSpace(m_prop ≤ 0.1, vars))
+hits_ground = @map(x -> x, dim:9, x ∈ below_ground)
+burns_out = @map(x -> x, dim:9, x ∈ HalfSpace(m_prop ≤ 0.1, vars))
 resetmaps = Any[]
 # Transition 1: thrust on -> thrust off
 add_transition!(automaton, 1, 2, 1)
@@ -105,6 +82,7 @@ x0 = Any[
     70 ± 3,     # Isp
     60 ± 5,     # m_dry
     900..950,   # T
+    0.0,        # θ
 ] |> to_set |> concretize
 
 ic = [(1, x0)]
@@ -112,26 +90,51 @@ ic = [(1, x0)]
 
 ## Solve plain problem
 ivp = InitialValueProblem(H, ic)
-alg = TMJets(; orderT=9, disjointness=BoxEnclosure(), maxsteps=10000)
-sol = solve(ivp, alg; T=10.0);
+# alg = TMJets(; orderT=9, disjointness=BoxEnclosure(), maxsteps=10000)
+# sol = solve(ivp, alg; T=10.0);
 
 
 ## Optimization setup
 function solve_with_params(x, p)
     @unpack prob, alg, T = p
     ivp = @set prob.s.modes[1].f.params = x
-    return solve(ivp, alg; T)
+    Tx = eltype(x)
+    alg = TMJets(;
+        orderT=alg.orderT,
+        abstol=Tx(alg.abstol),
+        minabstol=Tx(alg.minabstol),
+        ε=Tx(alg.ε),
+        δ=Tx(alg.δ),
+    )
+    return solve(ivp, alg; tspan=Tx.((0, T)))
 end
 
 
 ##
 p = (
     prob = ivp,
-    alg = TMJets(; orderT=9, disjointness=BoxEnclosure(), maxsteps=10000),
+    alg = TMJets(;
+        orderT=6,
+        # orderQ=1,
+        # maxsteps=100,
+        # validatesteps=5,
+        # disjointness=BoxEnclosure(),
+        # minabstol=1e-10,
+        # adaptive=false,
+        abstol=1e-7,
+    ),
     T = 10.0,
 )
 
-sol = solve_with_params(ComponentArray(kp=0.01, kd=0.05), p);
+@time sol = solve_with_params(ComponentArray(kp=0.01, kd=0.2), p);
+# @time sol = solve_with_params(params, p);
+plot(sol[1], vars=(1,2), aspect_ratio=1)
 
 
 ##
+requirements = convert(Hyperrectangle, (-2..2)×(-5..10))
+function loss(x, p)
+    on_ground = solve_with_params(x, p)[2][end].X
+    vels = project(on_ground, (3,4))
+    return area(vels ∩ requirements) / area(vels)
+end

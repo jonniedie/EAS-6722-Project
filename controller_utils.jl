@@ -1,35 +1,26 @@
-# Make a dense neural network layer
-make_layer(num_in, num_out, activation=Id()) = Layer(rand(num_out, num_in), rand(num_out), activation)
+using ConcreteStructs
 
-collect_params(layer::Layer) = vcat(vec(layer.weights), layer.bias)
-collect_params(network::Network) = mapreduce(collect_params, vcat, network.layers)
 
-function set_params!(layer::Layer, values)
-    n_weights = length(layer.weights)
-    layer.weights[:] .= @view values[1:n_weights]
-    layer.bias .= @view values[n_weights+1:end]
-    return layer
-end
-function set_params!(network::Network, values)
-    i_begin = 1
-    for layer in network.layers
-        i_end = i_begin + length(layer.weights) + length(layer.bias) - 1
-        set_params!(layer, @view(values[i_begin:i_end]))
-        i_begin = i_end+1
-    end
-    return network
+# Controller definitions
+Base.@kwdef @concrete struct WithController <: Function
+    ode_fun<:Function
+    controller<:Function = (x,p,t) -> 0
+    params = nothing
 end
 
-Base.@kwdef mutable struct PD{T}
-    kp::T = 0.0
-    kd::T = 0.0
-end
+(sys::WithController)(dx, x, p, t) = sys.ode_fun(dx, x, (p, sys.controller(x, sys.params, t)), t)
+(sys::WithController)(x, p, t) = sys.ode_fun(x, (p, sys.controller(x, sys.params, t)), t)
 
-(controller::PD)(x) = controller.kp*x[1] + controller.kd*x[2]
 
-collect_params(controller::PD) = [controller.kp, controller.kd]
-function set_params!(controller::PD, values)
-    controller.kp = values[1]
-    controller.kd = values[2]
-    return controller
+# Neural network stuff
+dense_layer(n_in, n_out, activation=identity; eltype=Float32) = (; params=ComponentArray{eltype}(W=glorot_uniform(n_out, n_in), b=zeros(n_out)), activation)
+
+function chain(; layers...)
+    layers = NamedTuple(layers)
+    params = ComponentArray(; map(first, layers)...)
+    activations = map(last, layers)
+    k = valkeys(params)
+    f = (x,p,t) -> reduce((x,(f,p))->f.(p.W*x .+ p.b), zip(activations, view.(Ref(p), k)); init=x)
+    return (; params, f)
 end
+chain(layer1, layers...) = chain(; NamedTuple{ntuple(i->Symbol(:layer, i), length(layers)+1)}((layer1, layers...))...)
