@@ -1,9 +1,14 @@
+using SimulationLogs
+
 const g = 9.80665
 
 # ODE function for 2D lander problem
 function lander_2D!(D, vars, (params, θ), t)
+    @log θ
     @unpack r, v, m_prop = vars
-    @unpack Isp, m_dry, T = params
+    @unpack Isp, m_dry, T, thrust_on = params
+
+    T = thrust_on ? T : zero(T)
 
     m = m_dry + m_prop
     Fx = T*sin(θ)
@@ -20,7 +25,9 @@ end
 
 function lander_2D(vars, (params, θ), t)
     @unpack r, v, m_prop = vars
-    @unpack Isp, m_dry, T = params
+    @unpack Isp, m_dry, T, thrust_on = params
+
+    T = thrust_on ? T : zero(T)
 
     m = m_dry + m_prop
     Fx = T*sin(θ)

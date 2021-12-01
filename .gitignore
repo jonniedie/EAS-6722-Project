@@ -17,6 +17,8 @@ deps/src/
 docs/build/
 docs/site/
 
+experiments/*/trained_controllers
+
 # I don't know what this is
 .DS_Store
 
@@ -25,3 +27,4 @@ docs/site/
 
 # No gifs
 *.gif
+*.png

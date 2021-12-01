@@ -4,10 +4,11 @@ using DiffEqFlux
 using DifferentialEquations
 using Flux: glorot_uniform, relu
 using ForwardDiff
-using Plots
-using ReachabilityAnalysis
+using Plots; plotlyjs()
+# using ReachabilityAnalysis
 using UnPack
-using Zygote
+using Serialization
+# using Zygote
 
 
 ## Includes
@@ -35,25 +36,26 @@ function build_prob()
     f = WithController(lander_2D!, controller, params)
 
     p = ComponentArray{Any}(
-        m_dry = 60 ± 3,
-        Isp = 75 ± 5,
-        T = 1100..1150,
+        m_dry = 1.0 ± 0.1,
+        Isp = 40 ± 1,
+        T = 14..16,
+        thrust_on = true,
     )
     x0 = ComponentArray{Any}(
         r = (
-            x = 0.0,
-            y = 160..170,
+            x = 0 ± 0.1,
+            y = 18 ± 2,
         ),
         v = (
-            x = 0 ± 5,
-            y = -45 ± 5,
+            x = 0 ± 1,
+            y = (-10)..(-5),
         ),
-        m_prop = 10.0,
+        m_prop = 0.1,
     )
 
     # Callback functions
     hits_ground = ContinuousCallback((vars, t, integrator) -> vars.r.y, terminate!)
-    burns_out = ContinuousCallback((vars, t, integrator) -> vars.m_prop, integrator->(integrator.p.T=0.0;))
+    burns_out = ContinuousCallback((vars, t, integrator) -> vars.m_prop, integrator -> (integrator.p.thrust_on=false;))
     cb = CallbackSet(burns_out, hits_ground)
 
     return ODEProblem{true}(f, x0, (0.0, 100.0), p; callback=cb)
@@ -61,7 +63,7 @@ end
 
 
 ##
-const widths = [1, 5, 10] #range_width.(requirements)
+const widths = [1, 5, 20] #range_width.(requirements)
 
 loss_single(v,w) = (v/w)^4
 
@@ -80,19 +82,20 @@ function run_with_params(x, p)
     #     u0_CoV,
     #     p_CoV,
     # ).u
-    return mc_expectation(loss, prob, prob.u0, prob.p, Tsit5(), EnsembleSerial();
+    return mc_expectation(loss, prob, prob.u0, prob.p, Tsit5(), EnsembleThreads();
         sensealg=ForwardDiffSensitivity(),
-        trajectories=100,
+        trajectories=200,
         u0_CoV,
         p_CoV,
     )
 end
 
 prob = build_prob()
-gradable_run(x) = run_with_params(x, (;prob))
+gradable_run = x -> run_with_params(x, (;prob))
+gradable_run2(x) = run_with_params(x, (;prob))
 
 ##
-@time mc_exp = mc_expectation(loss, prob, prob.u0, prob.p, Tsit5(), EnsembleSerial(); trajectories=20_000)
+@time mc_exp = mc_expectation(loss, prob, prob.u0, prob.p, Tsit5(), EnsembleThreads(); trajectories=20_000)
 # @time koop_exp = koopman_expectation(loss, prob, prob.u0, prob.p, Tsit5();
 #     # quadalg=CubaDivonne(),
 #     # iabstol=3e-2,
@@ -101,25 +104,87 @@ gradable_run(x) = run_with_params(x, (;prob))
 
 
 ##
-@time ForwardDiff.gradient(gradable_run, prob.f.f.params)
+@time ForwardDiff.gradient(gradable_run2, prob.f.f.params)
 # Zygote.gradient(gradable_run, prob.f.f.params)
 # ReverseDiff.gradient(gradable_run, prob.f.f.params)
 
 
 ##
 loss_history = Float32[]
+iter = 0
 cb = function (p, l, pred=nothing)
+    global iter += 1
+    println("Iter: $iter | Loss: $l")
     push!(loss_history, l)
     return false
 end
 opt_alg = nothing
 ad_type = DiffEqFlux.GalacticOptim.AutoForwardDiff()
-@time out = DiffEqFlux.sciml_train(gradable_run, prob.f.f.params, opt_alg, ad_type; maxiters=500, cb)
-@time out = DiffEqFlux.sciml_train(gradable_run, out.u, LBFGS(), ad_type; cb)
+# @time out = DiffEqFlux.sciml_train(gradable_run, prob.f.f.params, opt_alg, ad_type; maxiters=300, cb)
+@time out = DiffEqFlux.sciml_train(gradable_run, out.u, opt_alg, ad_type; maxiters=200, cb)
+# @time out = DiffEqFlux.sciml_train(gradable_run2, deserialize("control_params_from_work"), opt_alg, ad_type; maxiters=500, cb)
+# @time out = DiffEqFlux.sciml_train(gradable_run, out.u, LBFGS(), ad_type; cb)
 
 
 ##
 opt_prob = deepcopy(prob)
 opt_prob.f.f.params .= out.u
-mc_sol = mc_solve(opt_prob, opt_prob.u0, opt_prob.p, Tsit5(), EnsembleSerial(); trajectories=200)
+# opt_prob.f.f.params .= deserialize("control_params_from_work")
+mc_sol = mc_solve(opt_prob, opt_prob.u0, opt_prob.p, Tsit5(), EnsembleThreads(); trajectories=200)
 vels = reduce(hcat, [u[end][3:4] for u in mc_sol.u])
+
+
+##
+function plot_in_out(mc_sol, idx_in::AbstractString, idx_out::AbstractString)
+    idx_in = Symbol.(split(idx_in, "."))
+    idx_out = Symbol.(split(idx_out, "."))
+    in_vals = [reduce(getproperty, idx_in; init=sol[begin]) for sol in mc_sol.u]
+    out_vals = [reduce(getproperty, idx_out; init=sol[end]) for sol in mc_sol.u]
+    return scatter(in_vals, out_vals; legend=false)
+end
+
+##
+plt_loss = plot(loss_history; yscale=:log10, legend=false, xlabel="Iteration", ylabel="Loss")
+
+##
+plt_sensitivity = plot(
+    scatter([sol.prob.p.m_dry for sol in mc_sol.u], [abs2(sol[end].v.x) for sol in mc_sol.u], ylabel="|v.x|₂"),
+    scatter([sol.prob.p.Isp for sol in mc_sol.u], [abs2(sol[end].v.x) for sol in mc_sol.u]),
+    scatter([sol.prob.p.T for sol in mc_sol.u], [abs2(sol[end].v.x) for sol in mc_sol.u]),
+    scatter([sol[1].v.x for sol in mc_sol.u], [abs2(sol[end].v.x) for sol in mc_sol.u]),
+    scatter([sol[1].v.y for sol in mc_sol.u], [abs2(sol[end].v.x) for sol in mc_sol.u]),
+    scatter([sol[1].r.x for sol in mc_sol.u], [abs2(sol[end].v.x) for sol in mc_sol.u]),
+    scatter([sol[1].r.y for sol in mc_sol.u], [abs2(sol[end].v.x) for sol in mc_sol.u]),
+    scatter([sol.prob.p.m_dry for sol in mc_sol.u], [abs2(sol[end].v.y) for sol in mc_sol.u], ylabel="|v.y|₂"),
+    scatter([sol.prob.p.Isp for sol in mc_sol.u], [abs2(sol[end].v.y) for sol in mc_sol.u]),
+    scatter([sol.prob.p.T for sol in mc_sol.u], [abs2(sol[end].v.y) for sol in mc_sol.u]),
+    scatter([sol[1].v.x for sol in mc_sol.u], [abs2(sol[end].v.y) for sol in mc_sol.u]),
+    scatter([sol[1].v.y for sol in mc_sol.u], [abs2(sol[end].v.y) for sol in mc_sol.u]),
+    scatter([sol[1].r.x for sol in mc_sol.u], [abs2(sol[end].v.y) for sol in mc_sol.u]),
+    scatter([sol[1].r.y for sol in mc_sol.u], [abs2(sol[end].v.y) for sol in mc_sol.u]),
+    scatter([sol.prob.p.m_dry for sol in mc_sol.u], [abs2(sol[end].r.x) for sol in mc_sol.u], xlabel="m_dry", ylabel="|r.x|₂"),
+    scatter([sol.prob.p.Isp for sol in mc_sol.u], [abs2(sol[end].r.x) for sol in mc_sol.u], xlabel="Isp"),
+    scatter([sol.prob.p.T for sol in mc_sol.u], [abs2(sol[end].r.x) for sol in mc_sol.u], xlabel="T"),
+    scatter([sol[1].v.x for sol in mc_sol.u], [abs2(sol[end].r.x) for sol in mc_sol.u], xlabel="v.x"),
+    scatter([sol[1].v.y for sol in mc_sol.u], [abs2(sol[end].r.x) for sol in mc_sol.u], xlabel="v.y"),
+    scatter([sol[1].r.x for sol in mc_sol.u], [abs2(sol[end].r.x) for sol in mc_sol.u], xlabel="r.x"),
+    scatter([sol[1].r.y for sol in mc_sol.u], [abs2(sol[end].r.x) for sol in mc_sol.u], xlabel="r.y"),
+    layout=(3,7),
+    legend=false,
+    markersize=1,
+    axis=false,
+)
+
+##
+plt_pos = plot(mc_sol; vars=(1,2), xlabel="Horizontal Position (m)", ylabel="Vertical Position (m)")
+
+##
+plt_vel = plot(
+    plot(
+        plot(mc_sol; vars=3, xlabel=nothing, ylabel="Horizontal Velocity (m/s)"),
+        plot(mc_sol; vars=4, xlabel="Time (s)", ylabel="Vertical Velocity (m/s)"),
+        layout=(2,1),
+    ),
+    scatter(vels[1,:], vels[2,:]; xlabel="Horizontal Velocity (m/s)", ylabel="Vertical Velocity (m/s)", ms=3),
+    legend=false,
+)
