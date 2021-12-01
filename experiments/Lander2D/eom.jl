@@ -3,8 +3,9 @@ using SimulationLogs
 const g = 9.80665
 
 # ODE function for 2D lander problem
-function lander_2D!(D, vars, (params, θ), t)
-    @log θ
+function lander_2D!(D, vars, (params, controls), t)
+    @log θ = controls.θ
+    # @log δtgo = controls.δtgo
     @unpack r, v, m_prop = vars
     @unpack Isp, m_dry, T, thrust_on = params
 
@@ -19,6 +20,7 @@ function lander_2D!(D, vars, (params, θ), t)
     D.v.x = Fx/m
     D.v.y = -g + Fy/m
     D.m_prop = -T / (Isp * g)
+    # D.tgo = -abs(δtgo)
 
     return nothing
 end

@@ -8,6 +8,7 @@ using Plots; plotlyjs()
 # using ReachabilityAnalysis
 using UnPack
 using Serialization
+using Statistics
 # using Zygote
 
 
@@ -23,9 +24,10 @@ function build_prob()
     params, controller = chain(
         dense_layer( 5, 10, tanh),
         dense_layer(10, 10, tanh),
-        dense_layer(10,  1),
+        dense_layer(10,  2),
     )
-    controller = first ∘ controller
+    ctrl_ax = Axis(θ=1, tgo=2)
+    controller = (x->ComponentArray(x, ctrl_ax)) ∘ controller
     
     # # PD controller
     # params = ComponentArray(kp=0.01, kd=0.05)
@@ -37,33 +39,39 @@ function build_prob()
 
     p = ComponentArray{Any}(
         m_dry = 1.0 ± 0.1,
-        Isp = 40 ± 1,
+        Isp = 60 ± 1,
         T = 14..16,
-        thrust_on = true,
+        thrust_on = false,
     )
     x0 = ComponentArray{Any}(
         r = (
-            x = 0 ± 0.1,
-            y = 18 ± 2,
+            x = 0 ± 1,
+            y = 40 ± 5,
         ),
         v = (
-            x = 0 ± 1,
+            x = 0 ± 5,
             y = (-10)..(-5),
         ),
         m_prop = 0.1,
+        # tgo = 1.0,
     )
 
     # Callback functions
     hits_ground = ContinuousCallback((vars, t, integrator) -> vars.r.y, terminate!)
+    # turns_on = ContinuousCallback((vars, t, integrator) -> vars.tgo, identity;
+    #     affect_neg! = integrator -> (integrator.p.thrust_on=true;),
+    #     repeat_nudge=Inf,
+    # )
+    turns_on = PresetTimeCallback([1.0], integrator -> (integrator.p.thrust_on=true;))
     burns_out = ContinuousCallback((vars, t, integrator) -> vars.m_prop, integrator -> (integrator.p.thrust_on=false;))
-    cb = CallbackSet(burns_out, hits_ground)
+    cb = CallbackSet(burns_out, turns_on, hits_ground)
 
     return ODEProblem{true}(f, x0, (0.0, 100.0), p; callback=cb)
 end
 
 
 ##
-const widths = [1, 5, 20] #range_width.(requirements)
+const widths = [1, 3, 50] #range_width.(requirements)
 
 loss_single(v,w) = (v/w)^4
 
@@ -72,22 +80,34 @@ loss(sol) = mapreduce(loss_single, +, view(sol.u[end], [3:4; 1]), widths)
 function run_with_params(x, p)
     @unpack ode_fun, controller = p.prob.f.f
     f! = WithController(; ode_fun, controller, params=x)
-    prob = remake(p.prob; f=f!)
     ax_u0 = getaxes(p.prob.u0)
     ax_p = getaxes(p.prob.p)
     u0_CoV = (u,p) -> eltype(x).(ComponentArray(u, ax_u0))
     p_CoV = (u,p) -> ComponentArray(p, ax_p)
-    # return koopman_expectation(loss, prob, prob.u0, prob.p, Tsit5();
+    _u0 = CombinedUncertainDiffEq.recursive_convert(CombinedUncertainDiffEq.to_distribution, p.prob.u0)
+    _p = CombinedUncertainDiffEq.recursive_convert(CombinedUncertainDiffEq.to_distribution, p.prob.p)
+    prob_func = function (prob, i, repeat)
+        __u0 = u0_CoV(CombinedUncertainDiffEq._rand.(_u0), _p)
+        __p = p_CoV(_u0, CombinedUncertainDiffEq._rand.(_p))
+        kwargs = deepcopy(p.prob.kwargs)
+        kwargs[:callback].discrete_callbacks[1].condition.tstops[1] = ForwardDiff.value(controller(__u0, x, 0.0).tgo)
+        # prob = remake(p.prob; f=f!, kwargs=kwargs)
+        remake(prob, f=f!, kwargs=kwargs, u0=__u0, p=__p)
+    end
+    mc_prob = EnsembleProblem(prob; prob_func=prob_func)
+    sols =  solve(mc_prob, Tsit5(), EnsembleThreads(); trajectories=200)
+    return mean(loss, sols.u)
+    # # return koopman_expectation(loss, prob, prob.u0, prob.p, Tsit5();
+    # #     sensealg=ForwardDiffSensitivity(),
+    # #     u0_CoV,
+    # #     p_CoV,
+    # # ).u
+    # return mc_expectation(loss, prob, prob.u0, prob.p, Tsit5(), EnsembleThreads();
     #     sensealg=ForwardDiffSensitivity(),
+    #     trajectories=200,
     #     u0_CoV,
     #     p_CoV,
-    # ).u
-    return mc_expectation(loss, prob, prob.u0, prob.p, Tsit5(), EnsembleThreads();
-        sensealg=ForwardDiffSensitivity(),
-        trajectories=200,
-        u0_CoV,
-        p_CoV,
-    )
+    # )
 end
 
 prob = build_prob()
@@ -120,8 +140,8 @@ cb = function (p, l, pred=nothing)
 end
 opt_alg = nothing
 ad_type = DiffEqFlux.GalacticOptim.AutoForwardDiff()
-# @time out = DiffEqFlux.sciml_train(gradable_run, prob.f.f.params, opt_alg, ad_type; maxiters=300, cb)
-@time out = DiffEqFlux.sciml_train(gradable_run, out.u, opt_alg, ad_type; maxiters=200, cb)
+@time out = DiffEqFlux.sciml_train(gradable_run, prob.f.f.params, opt_alg, ad_type; maxiters=300, cb)
+# @time out = DiffEqFlux.sciml_train(gradable_run, out.u, opt_alg, ad_type; maxiters=200, cb)
 # @time out = DiffEqFlux.sciml_train(gradable_run2, deserialize("control_params_from_work"), opt_alg, ad_type; maxiters=500, cb)
 # @time out = DiffEqFlux.sciml_train(gradable_run, out.u, LBFGS(), ad_type; cb)
 
